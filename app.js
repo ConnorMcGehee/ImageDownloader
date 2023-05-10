@@ -239,7 +239,10 @@ async function main() {
     for (let url of errorUrlsArray) {
         errorUrls.add(url);
     }
-    const data = originalData.filter(line => !completedUrls.has(line.url.trim()) && !errorUrls.has(line.url.trim()) && line.originalIndex % 3 === userId);
+    const data = originalData.filter(line => {
+        const url = line.url.trim();
+        return !completedUrls.has(url) && !errorUrls.has(url) && line.originalIndex % 3 === userId;
+    });
     const questions = [];
     if (userId === undefined) {
         questions.push({

@@ -183,7 +183,8 @@ const generateFileStream = (prefix: string, counter: number = 0): Promise<fs.Wri
 
             stream.on("error", async (error) => {
                 if (error.message.startsWith("EEXIST: file already exists")) {
-                    resolve(await generateFileStream(prefix, counter + 1));
+                    reject(error);
+                    return;
                 } else {
                     logUpdateError(error.message);
                     reject(error);
@@ -270,7 +271,10 @@ async function main() {
         errorUrls.add(url);
     }
 
-    const data: ImageURL[] = originalData.filter(line => !completedUrls.has(line.url.trim()) && !errorUrls.has(line.url.trim()) && line.originalIndex % 3 === userId);
+    const data: ImageURL[] = originalData.filter(line => {
+        const url = line.url.trim();
+        return !completedUrls.has(url) && !errorUrls.has(url) && line.originalIndex % 3 === userId;
+    });
 
     const questions: Question[] = [];
 
