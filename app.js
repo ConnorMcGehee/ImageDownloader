@@ -246,7 +246,15 @@ async function main() {
     catch (error) {
         logUpdateError("Error writing to .env file");
     }
-    const concurrency = 10;
+    let concurrency = 5;
+    questions.length = 0;
+    questions.push({
+        name: "concurrency",
+        message: "How many images would you like to download concurrently? (Default 5)"
+    });
+    await inquirer.prompt(questions).then(async (answer) => {
+        clientId = answer.concurrency;
+    });
     const asyncQueue = new AsyncQueue(concurrency);
     logUpdate(`${index} of ${data.length} Completed (${(index / (data.length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(NaN)}`);
     const startTime = Date.now();
