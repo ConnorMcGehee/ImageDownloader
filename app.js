@@ -165,7 +165,8 @@ const generateFileStream = (prefix, counter = 0) => {
             const stream = fs.createWriteStream(`./images/${incrementer}${prefix}`, { flags: "wx" });
             stream.on("error", async (error) => {
                 if (error.message.startsWith("EEXIST: file already exists")) {
-                    resolve(await generateFileStream(prefix, counter + 1));
+                    reject(error);
+                    return;
                 }
                 else {
                     logUpdateError(error.message);
