@@ -2,10 +2,17 @@ import fs from "fs";
 import logUpdate from "log-update";
 import { Readable } from "stream";
 import dotenv from "dotenv";
-import readline from "readline";
+import inquirer from "inquirer";
 dotenv.config();
 let clientId = process.env.CLIENT_ID || "";
+let userId = process.env.USER_ID ? parseInt(process.env.USER_ID) : undefined;
 let index = 0;
+var Users;
+(function (Users) {
+    Users[Users["BuzzerBee"] = 0] = "BuzzerBee";
+    Users[Users["Different55"] = 1] = "Different55";
+    Users[Users["Tomahawk"] = 2] = "Tomahawk";
+})(Users || (Users = {}));
 const getImgurAlbumLinks = async (hash) => {
     try {
         let links = [];
@@ -170,39 +177,78 @@ async function createFileIfNotExists(filePath, initialContent = '') {
 async function main() {
     await createFileIfNotExists('errors.txt');
     await createFileIfNotExists('progress.txt');
-    try {
-        await fs.promises.access("urls.txt", fs.constants.F_OK);
-    }
-    catch {
-        throw new Error("urls.txt file does not exist");
-    }
+    const originalData = [];
+    await fetch("https://raw.githubusercontent.com/ConnorMcGehee/ImageDownloader/main/urls.txt")
+        .then(res => res.text())
+        .then(text => {
+        const urls = text.split("\n");
+        urls.forEach((url, index) => {
+            originalData.push({
+                url: url,
+                originalIndex: index
+            });
+        });
+    })
+        .catch(error => {
+        throw new Error("Couldn't fetch image URL list: ", error.message);
+    });
     const completedUrls = new Set((await fs.promises.readFile("progress.txt", { encoding: "utf-8" }))
         .split("\n")
         .filter(line => line.trim() !== ""));
-    const data = (await fs.promises.readFile("urls.txt", { encoding: "utf-8" }))
+    const errorUrls = new Set((await fs.promises.readFile("errors.txt", { encoding: "utf-8" }))
         .split("\n")
-        .filter(line => !completedUrls.has(line.trim()));
+        .filter(line => line.trim() !== ""));
+    const data = originalData.filter(line => !completedUrls.has(line.url.trim()) && !errorUrls.has(line.url.trim()) && line.originalIndex % 3 === userId);
+    const questions = [];
+    if (userId === undefined) {
+        questions.push({
+            type: 'list',
+            name: 'user',
+            message: 'Who are you?',
+            choices: ["BuzzerBee", "Different55", "Tomahawk"]
+        });
+    }
     if (!clientId) {
-        var rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
+        questions.push({
+            name: "clientId",
+            message: "What is your Imgur API Client ID?"
         });
-        clientId = await new Promise((resolve) => {
-            rl.question("What is your Imgur API Client ID? ", async function (response) {
-                rl.close();
-                resolve(response);
-                try {
-                    await fs.promises.writeFile('.env', `CLIENT_ID=${response}`);
-                }
-                catch (error) {
-                    logUpdateError("Error writing CLIENT_ID to .env file");
-                }
-            });
+    }
+    await inquirer.prompt(questions).then(async (answers) => {
+        userId = userId !== undefined ? userId : Users[answers.user];
+        clientId = clientId ? clientId : answers.clientId;
+    });
+    let validClientId = false;
+    while (!validClientId) {
+        await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
+            .then(res => res.json())
+            .then(data => {
+            if (!data.data.error) {
+                validClientId = true;
+            }
         });
+        if (validClientId) {
+            break;
+        }
+        const invalidPrompt = [
+            {
+                name: "validId",
+                message: "Invalid Imgur API Client ID. Please enter a valid ID:"
+            }
+        ];
+        await inquirer.prompt(invalidPrompt).then(async (answer) => {
+            clientId = answer.validId;
+        });
+    }
+    try {
+        await fs.promises.writeFile('.env', `CLIENT_ID=${clientId}\nUSER_ID=${userId}`);
+    }
+    catch (error) {
+        logUpdateError("Error writing to .env file");
     }
     const concurrency = 10;
     const asyncQueue = new AsyncQueue(concurrency);
-    logUpdate(`${index} of ${data.length} Completed (${(index / (data.length - 1) * 100).toFixed(2)}%) - Remaining Time: ${-1}`);
+    logUpdate(`${index} of ${data.length} Completed (${(index / (data.length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(NaN)}`);
     const startTime = Date.now();
     setInterval(() => {
         const elapsedTime = Date.now() - startTime;
@@ -211,7 +257,7 @@ async function main() {
         logUpdate(progressMessage);
     }, 1000);
     for (const url of data) {
-        asyncQueue.push(() => processUrl(url));
+        asyncQueue.push(() => processUrl(url.url));
     }
     await asyncQueue.finish();
 }
