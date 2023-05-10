@@ -11,6 +11,9 @@ let userId: number | undefined = process.env.USER_ID ? parseInt(process.env.USER
 let index = 0;
 let imgurCount = 0;
 
+const completedUrls: Set<string> = new Set();
+const errorUrls: Set<string> = new Set();
+
 enum Users {
     BuzzerBee = 0,
     Different55 = 1,
@@ -51,7 +54,7 @@ const processUrl = async (url: string) => {
 
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
 
-        if (urlWithoutProtocol.startsWith("imgur.com")) {
+        if (urlWithoutProtocol.startsWith("imgur.com") || urlWithoutProtocol.startsWith("i.imgur.com")) {
             imgurCount++;
             if (imgurCount >= 12_250) {
                 logUpdateError("Warning! Approaching Imgur rate limit");
@@ -83,6 +86,10 @@ const processUrl = async (url: string) => {
             const redirectUrl = response.url;
             const redirectUrlWithoutProtocol = redirectUrl.replace(/^https?:\/\//, '');
             if (urlWithoutProtocol !== redirectUrlWithoutProtocol) {
+                if (redirectUrl === "https://i.imgur.com/removed.png") {
+                    logUpdateError(`Skipping URL ${url}, this Imgur image no longer exists.`)
+                    await saveError(originalUrl);
+                }
                 url = redirectUrl;
             }
         }
@@ -223,16 +230,21 @@ async function main() {
             throw new Error("Couldn't fetch image URL list: ", error.message)
         });
 
-    const completedUrls = new Set(
-        (await fs.promises.readFile("progress.txt", { encoding: "utf-8" }))
-            .split("\n")
-            .filter(line => line.trim() !== "")
-    );
-    const errorUrls = new Set(
-        (await fs.promises.readFile("errors.txt", { encoding: "utf-8" }))
-            .split("\n")
-            .filter(line => line.trim() !== "")
-    );
+    const completedUrlsArray = (await fs.promises.readFile("progress.txt", { encoding: "utf-8" }))
+        .split("\n")
+        .filter(line => line.trim() !== "")
+
+    for (let url of completedUrlsArray) {
+        completedUrls.add(url);
+    }
+
+    const errorUrlsArray = (await fs.promises.readFile("errors.txt", { encoding: "utf-8" }))
+        .split("\n")
+        .filter(line => line.trim() !== "")
+
+    for (let url of errorUrlsArray) {
+        errorUrls.add(url);
+    }
 
     const data: ImageURL[] = originalData.filter(line => !completedUrls.has(line.url.trim()) && !errorUrls.has(line.url.trim()) && line.originalIndex % 3 === userId);
 
@@ -335,7 +347,10 @@ function logUpdateError(message: string) {
 
 async function saveProgress(url: string) {
     try {
-        await fs.promises.appendFile("progress.txt", `${url}\n`, { encoding: "utf-8" });
+        if (!completedUrls.has(url)) {
+            completedUrls.add(url);
+            await fs.promises.appendFile("progress.txt", `${url}\n`, { encoding: "utf-8" });
+        }
     } catch (error) {
         logUpdateError(`Error saving progress file`);
     }
@@ -343,7 +358,10 @@ async function saveProgress(url: string) {
 
 async function saveError(url: string) {
     try {
-        await fs.promises.appendFile("errors.txt", `${url}\n`, { encoding: "utf-8" });
+        if (!errorUrls.has(url)) {
+            errorUrls.add(url);
+            await fs.promises.appendFile("errors.txt", `${url}\n`, { encoding: "utf-8" });
+        }
     } catch (error) {
         logUpdateError(`Error saving errors file`);
     }
