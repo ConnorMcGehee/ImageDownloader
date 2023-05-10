@@ -250,10 +250,12 @@ async function main() {
     questions.length = 0;
     questions.push({
         name: "concurrency",
-        message: "How many images would you like to download concurrently? (Default 5)"
+        message: "How many images would you like to download concurrently? (Default 5, press enter to skip)"
     });
     await inquirer.prompt(questions).then(async (answer) => {
-        clientId = answer.concurrency;
+        if (answer.concurrency) {
+            concurrency = answer.concurrency;
+        }
     });
     const asyncQueue = new AsyncQueue(concurrency);
     logUpdate(`${index} of ${data.length} Completed (${(index / (data.length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(NaN)}`);
