@@ -183,8 +183,8 @@ const generateFileStream = (prefix: string, counter: number = 0): Promise<fs.Wri
 
             stream.on("error", async (error) => {
                 if (error.message.startsWith("EEXIST: file already exists")) {
+                    logUpdateError(`Error saving the image: ${error.message}`)
                     reject(error);
-                    return;
                 } else {
                     logUpdateError(error.message);
                     reject(error);
@@ -238,18 +238,15 @@ async function main() {
         process.exit();
     }
 
-    const originalData: ImageURL[] = [];
+    const data: string[] = [];
 
     await fetch("https://raw.githubusercontent.com/ConnorMcGehee/ImageDownloader/main/urls.txt")
         .then(res => res.text())
         .then(text => {
             const urls = text.split("\n");
-            urls.forEach((url, index) => {
-                originalData.push({
-                    url: url,
-                    originalIndex: index
-                })
-            })
+            for (let url of urls) {
+                data.push(url);
+            }
         })
         .catch(error => {
             throw new Error("Couldn't fetch image URL list: ", error.message)
@@ -270,11 +267,6 @@ async function main() {
     for (let url of errorUrlsArray) {
         errorUrls.add(url);
     }
-
-    const data: ImageURL[] = originalData.filter(line => {
-        const url = line.url.trim();
-        return !completedUrls.has(url) && !errorUrls.has(url) && line.originalIndex % 3 === userId;
-    });
 
     const questions: Question[] = [];
 
@@ -340,22 +332,27 @@ async function main() {
 
     asyncQueue = new AsyncQueue(concurrency);
 
-    logUpdate(`${index} of ${data.length} Completed (${(index / (data.length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(NaN)}`);
+    logUpdate(`0 of 0 Completed (0.00%) - Remaining Time: ${msToHMS(NaN)}`);
     const startTime = Date.now();
+
+    let length = 0;
 
     setInterval(() => {
         const elapsedTime = Date.now() - startTime;
-        const remainingTime = ((data.length - index) / (index / elapsedTime)) - elapsedTime;
-        progressMessage = `${index} of ${data.length} Completed (${(index / (data.length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(remainingTime)}`;
+        const remainingTime = ((length - index) / (index / elapsedTime)) - elapsedTime;
+        progressMessage = `${index} of ${length} Completed (${(index / (length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(remainingTime)}`;
         logUpdate(progressMessage);
     }, 1000);
 
-    for (const url of data) {
-        asyncQueue.push(() => processUrl(url.url)).catch(async (error) => {
-            logUpdateError(error);
-            await saveError(url.url);
-        });
-    }
+    data.forEach((url, index) => {
+        if (!completedUrls.has(url) && !errorUrls.has(url) && index % 3 === userId) {
+            length++;
+            asyncQueue.push(() => processUrl(url)).catch(async (error) => {
+                logUpdateError(error);
+                await saveError(url);
+            });
+        }
+    });
 
     await asyncQueue.finish();
 
