@@ -260,6 +260,8 @@ async function main() {
         asyncQueue.push(() => processUrl(url.url));
     }
     await asyncQueue.finish();
+    logUpdate("Finished!");
+    process.exit();
 }
 main().catch((error) => logUpdateError(error));
 let progressMessage = "";

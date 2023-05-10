@@ -294,6 +294,10 @@ async function main() {
     }
 
     await asyncQueue.finish();
+
+    logUpdate("Finished!")
+
+    process.exit();
 }
 
 main().catch((error) => logUpdateError(error));
