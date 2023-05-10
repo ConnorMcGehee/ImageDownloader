@@ -7,13 +7,14 @@ dotenv.config();
 let clientId = process.env.CLIENT_ID || "";
 let userId = process.env.USER_ID ? parseInt(process.env.USER_ID) : undefined;
 let index = 0;
+let imgurCount = 0;
 var Users;
 (function (Users) {
     Users[Users["BuzzerBee"] = 0] = "BuzzerBee";
     Users[Users["Different55"] = 1] = "Different55";
     Users[Users["Tomahawk"] = 2] = "Tomahawk";
 })(Users || (Users = {}));
-const getImgurAlbumLinks = async (hash) => {
+const getImgurAlbumLinks = async (hash, originalUrl) => {
     try {
         let links = [];
         let response = await fetch(`https://api.imgur.com/3/album/${hash}/images`, { headers: { "Authorization": `Client-ID ${clientId}` } });
@@ -33,8 +34,8 @@ const getImgurAlbumLinks = async (hash) => {
         return links;
     }
     catch (error) {
-        logUpdateError(`${hash} album hash failed`);
-        await saveError(`hash: ${hash}`);
+        logUpdateError(`Error getting image from Imgur hash ${hash}`);
+        await saveError(originalUrl);
         return;
     }
 };
@@ -42,10 +43,18 @@ const processUrl = async (url) => {
     try {
         const originalUrl = url;
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
+        if (urlWithoutProtocol.startsWith("imgur.com")) {
+            imgurCount++;
+            if (imgurCount >= 12_250) {
+                logUpdateError("Warning! Approaching Imgur rate limit");
+                console.log("Approaching Imgur rate limit. Shutting down. Please try again in 24 hours.");
+                process.exit();
+            }
+        }
         if (urlWithoutProtocol.startsWith("imgur.com/a/") || urlWithoutProtocol.startsWith("imgur.com/gallery/")) {
             const hash = urlWithoutProtocol.split("/").pop();
             if (hash) {
-                const links = await getImgurAlbumLinks(hash);
+                const links = await getImgurAlbumLinks(hash, originalUrl);
                 if (links && links.length > 0) {
                     for (let link of links) {
                         processUrl(link);
@@ -73,7 +82,6 @@ const processUrl = async (url) => {
                 const response = await fetch(url)
                     .then(res => res.arrayBuffer())
                     .then(arrayBuffer => Buffer.from(arrayBuffer));
-                // Convert the buffer to a readable stream
                 const readableStream = new Readable();
                 readableStream.push(response);
                 readableStream.push(null);
@@ -267,11 +275,13 @@ async function main() {
         logUpdate(progressMessage);
     }, 1000);
     for (const url of data) {
-        asyncQueue.push(() => processUrl(url.url));
+        asyncQueue.push(() => processUrl(url.url)).catch(async (error) => {
+            logUpdateError(error);
+            await saveError(url.url);
+        });
     }
     await asyncQueue.finish();
     logUpdate("Finished!");
-    process.exit();
 }
 main().catch((error) => logUpdateError(error));
 let progressMessage = "";
@@ -304,6 +314,7 @@ function msToHMS(ms) {
     return `${hours}h ${minutes}m ${seconds}s`;
 }
 class AsyncQueue {
+    shuttingDown;
     concurrency;
     active;
     queue;
@@ -311,8 +322,12 @@ class AsyncQueue {
         this.concurrency = concurrency;
         this.active = 0;
         this.queue = [];
+        this.shuttingDown = false;
     }
     push(task) {
+        if (this.shuttingDown) {
+            return Promise.reject(new Error('Shutdown in progress'));
+        }
         return new Promise((resolve) => {
             this.queue.push(async () => {
                 await task();
@@ -321,6 +336,9 @@ class AsyncQueue {
             });
             this.processTask();
         });
+    }
+    startShutdown() {
+        this.shuttingDown = true;
     }
     async processTask() {
         if (this.active >= this.concurrency || this.queue.length === 0) {
