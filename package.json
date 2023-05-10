@@ -12,5 +12,8 @@
   "devDependencies": {
     "@types/inquirer": "^9.0.3",
     "@types/node": "^20.1.0"
+  },
+  "scripts": {
+    "start": "node app.js"
   }
 }
