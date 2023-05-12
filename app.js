@@ -3,6 +3,7 @@ import logUpdate from "log-update";
 import { Readable } from "stream";
 import dotenv from "dotenv";
 import inquirer from "inquirer";
+import fetch from "node-fetch";
 dotenv.config();
 let clientId = process.env.CLIENT_ID || "";
 let userId = process.env.USER_ID ? parseInt(process.env.USER_ID) : undefined;
@@ -317,7 +318,7 @@ async function main() {
     while (!validClientId) {
         await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
             .then(res => res.json())
-            .then(data => {
+            .then((data) => {
             if (!data.data.error) {
                 validClientId = true;
             }
