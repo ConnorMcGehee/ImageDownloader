@@ -1,4 +1,4 @@
-import fs from "fs";
+import fs, { link } from "fs";
 import logUpdate from "log-update"
 import { Readable } from "stream";
 import dotenv from "dotenv";
@@ -20,6 +20,7 @@ enum Users {
     BuzzerBee = 0,
     Different55 = 1,
     Tomahawk = 2,
+    All = 3
 }
 
 const getImgurAlbumLinks = async (hash: string, originalUrl: string) => {
@@ -28,22 +29,37 @@ const getImgurAlbumLinks = async (hash: string, originalUrl: string) => {
         let response = await fetch(`https://api.imgur.com/3/album/${hash}/images`, { headers: { "Authorization": `Client-ID ${clientId}` } });
 
         if (response.status === 404) {
-            const data = await fetch(`https://api.imgur.com/3/image/${hash}`, { headers: { "Authorization": `Client-ID ${clientId}` } })
-                .then(res => res.json());
+            const newResponse = await fetch(`https://api.imgur.com/3/image/${hash}`, { headers: { "Authorization": `Client-ID ${clientId}` } });
+            if (newResponse.status >= 400) {
+                logUpdateError(`Error ${newResponse.status} getting image from Imgur hash ${hash}`)
+                await saveError(originalUrl);
+                return;
+            }
+            const data = await newResponse.json();
             links.push(data.data.link)
 
         }
+        else if (response.status === 429) {
+            logUpdateError(`Error ${response.status} fetching ${originalUrl}: Rate limit reached. Stopping...`);
+            asyncQueue.startShutdown();
+            return;
+        }
         else {
-            const data = await response.json();
+            const data = (await response.json()).data;
             if (data) {
-                for (let image of data) {
-                    links.push(image.link);
+                if (Array.isArray(data)) {
+                    for (let image of data) {
+                        links.push(image.link);
+                    }
+                }
+                else if (data.link) {
+                    links.push(data.link);
                 }
             }
         }
         return links;
     } catch (error) {
-        logUpdateError(`Error getting image from Imgur hash ${hash}`)
+        logUpdateError(`Error getting image from Imgur hash ${hash}, ${error}`)
         await saveError(originalUrl);
         return;
     }
@@ -51,8 +67,8 @@ const getImgurAlbumLinks = async (hash: string, originalUrl: string) => {
 
 
 const processUrl = async (url: string) => {
+    const originalUrl = url;
     try {
-        const originalUrl = url;
 
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
 
@@ -63,10 +79,15 @@ const processUrl = async (url: string) => {
                 console.log("Approaching Imgur rate limit. Shutting down. Please try again in 24 hours.");
                 await saveImgurCount();
                 asyncQueue.startShutdown();
+                return;
             }
         }
+        const splitUrl = originalUrl.replace(/^https?:\/\//, '').replaceAll("/", "_").split(".");
+        const endOfUrl = splitUrl[splitUrl.length - 1]
+        const exts = ["jpg", "jpeg", "png", "gif"];
+        if ((urlWithoutProtocol.startsWith("imgur.com/a/") || urlWithoutProtocol.startsWith("imgur.com/gallery/")) &&
+            !exts.includes(endOfUrl)) {
 
-        if (urlWithoutProtocol.startsWith("imgur.com/a/") || urlWithoutProtocol.startsWith("imgur.com/gallery/")) {
             const hash = urlWithoutProtocol.split("/").pop();
             if (hash) {
                 const links = await getImgurAlbumLinks(hash, originalUrl)
@@ -92,19 +113,45 @@ const processUrl = async (url: string) => {
                 if (redirectUrl === "https://i.imgur.com/removed.png") {
                     logUpdateError(`Skipping URL ${url}, this Imgur image no longer exists.`)
                     await saveError(originalUrl);
+                    return;
                 }
                 url = redirectUrl;
             }
         }
+        if (response.status >= 400) {
+            if (response.status === 404) {
+                logUpdateError(`Error ${response.status} fetching ${url}: Image not found`);
+            }
+            else if (response.status === 429) {
+                logUpdateError(`Error ${response.status} fetching ${url}: Rate limit reached. Stopping...`);
+                asyncQueue.startShutdown();
+                return;
+            }
+            else {
+                logUpdateError(`Error ${response.status} fetching ${url}: ${response.statusText}`);
+            }
+            await saveError(originalUrl);
+            return;
+        }
+        if (!response.headers.get("Content-Type") || !response.headers.get("Content-Type")?.startsWith("image")) {
+            logUpdateError(`Error, ${url} is not an image`);
+            await saveError(originalUrl);
+            return;
+        }
+        const ext = response.headers.get("Content-Type")?.split("/")[1];
+        if (!ext) {
+            logUpdateError(`Error, ${url} is not an image`);
+            await saveError(originalUrl);
+            return;
+        }
 
         const getImageStream = async (url: string): Promise<Readable> => {
             try {
-                const response = await fetch(url)
-                    .then(res => res.arrayBuffer())
+                const buffer = await response.arrayBuffer()
                     .then(arrayBuffer => Buffer.from(arrayBuffer));
 
                 const readableStream = new Readable();
-                readableStream.push(response);
+                readableStream.push(buffer);
                 readableStream.push(null)
 
                 return readableStream;
@@ -121,10 +168,12 @@ const processUrl = async (url: string) => {
             await fs.promises.mkdir("images", { recursive: true });
         }
 
-
         const fileName = () => {
-            const newUrl = originalUrl.replace(/^https?:\/\//, '').replaceAll("/", "_");
-            const splitUrl = newUrl.split(".")
+            const splitUrl = originalUrl.replace(/^https?:\/\//, '').replaceAll("/", "_").split(".");
+            const endOfUrl = splitUrl[splitUrl.length - 1]
+            if (!exts.includes(endOfUrl)) {
+                splitUrl.push(ext);
+            }
             let fileName = "";
             splitUrl.forEach((segment, index) => {
                 if (index === splitUrl.length - 1) {
@@ -159,15 +208,13 @@ const processUrl = async (url: string) => {
             logUpdateError('Error: Could not extract the filename from the URL');
             await saveError(originalUrl);
         }
-        if (response.status >= 400) {
-            logUpdateError(`Error getting ${url}: ${response.statusText}`)
-            await saveError(originalUrl);
-        }
     }
     catch (error) {
+        console.error(error)
         logUpdateError(`Error processing ${url}`);
         await saveError(url);
     }
+    await saveProgress(originalUrl);
     await saveProgress(url);
     index++;
 }
@@ -183,7 +230,6 @@ const generateFileStream = (prefix: string, counter: number = 0): Promise<fs.Wri
 
             stream.on("error", async (error) => {
                 if (error.message.startsWith("EEXIST: file already exists")) {
-                    logUpdateError(`Error saving the image: ${error.message}`)
                     reject(error);
                 } else {
                     logUpdateError(error.message);
@@ -208,13 +254,8 @@ async function createFileIfNotExists(filePath: string, initialContent = '') {
     }
 }
 
-interface ImageURL {
-    url: string,
-    originalIndex: number
-}
-
 async function main() {
-    setInterval(saveImgurCount, 60 * 1000);
+    const saveCount = setInterval(saveImgurCount, 60 * 1000);
     process.on('beforeExit', saveImgurCount);
 
     await createFileIfNotExists('errors.txt');
@@ -243,13 +284,20 @@ async function main() {
     await fetch("https://raw.githubusercontent.com/ConnorMcGehee/ImageDownloader/main/urls.txt")
         .then(res => res.text())
         .then(text => {
-            const urls = text.split("\n");
+            const urls = text.split("\n")
+                .filter(line => line.trim() !== "");
             for (let url of urls) {
                 data.push(url);
             }
         })
-        .catch(error => {
-            throw new Error("Couldn't fetch image URL list: ", error.message)
+        .catch(async () => {
+            const urlsArray = (await fs.promises.readFile("progress.txt", { encoding: "utf-8" }))
+                .split("\n")
+                .filter(line => line.trim() !== "");
+
+            for (let url of urlsArray) {
+                data.push(url);
+            }
         });
 
     const completedUrlsArray = (await fs.promises.readFile("progress.txt", { encoding: "utf-8" }))
@@ -275,7 +323,7 @@ async function main() {
             type: 'list',
             name: 'user',
             message: 'Who are you?',
-            choices: ["BuzzerBee", "Different55", "Tomahawk"]
+            choices: ["BuzzerBee", "Different55", "Tomahawk", "All"]
         });
     }
 
@@ -287,6 +335,10 @@ async function main() {
     }
 
     await inquirer.prompt(questions).then(async (answers) => {
+        if (answers.user === "All") {
+            userId = 3;
+            return;
+        }
         userId = userId !== undefined ? userId : Users[answers.user as keyof typeof Users];
         clientId = clientId ? clientId : answers.clientId;
     });
@@ -323,10 +375,20 @@ async function main() {
     questions.push({
         name: "concurrency",
         message: "How many images would you like to download concurrently? (Default 5, press enter to skip)"
-    })
+    });
+    questions.push({
+        name: "imgur",
+        type: "list",
+        message: "Imgur links only?",
+        choices: ["Yes", "No"]
+    });
+    let imgurOnly = false;
     await inquirer.prompt(questions).then(async (answer) => {
         if (answer.concurrency) {
             concurrency = answer.concurrency;
+        }
+        if (answer.imgur === "Yes") {
+            imgurOnly = true;
         }
     });
 
@@ -337,15 +399,29 @@ async function main() {
 
     let length = 0;
 
-    setInterval(() => {
+    const updateLog = setInterval(() => {
+        if (asyncQueue.shuttingDown) {
+            clearInterval(updateLog);
+            return;
+        }
         const elapsedTime = Date.now() - startTime;
         const remainingTime = ((length - index) / (index / elapsedTime)) - elapsedTime;
         progressMessage = `${index} of ${length} Completed (${(index / (length - 1) * 100).toFixed(2)}%) - Remaining Time: ${msToHMS(remainingTime)}`;
         logUpdate(progressMessage);
     }, 1000);
 
+    const completedUrlsWithoutProtocol = new Set(Array.from(completedUrls).map(url => url.replace(/^https?:\/\//, '')));
+    const errorUrlsWithoutProtocol = new Set(Array.from(errorUrls).map(url => url.replace(/^https?:\/\//, '')));
+
     data.forEach((url, index) => {
-        if (!completedUrls.has(url) && !errorUrls.has(url) && index % 3 === userId) {
+        const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
+        if (imgurOnly && !(urlWithoutProtocol.startsWith("imgur.com") || (urlWithoutProtocol.startsWith("i.imgur.com")))) {
+            return;
+        }
+        const validUserId = userId === 3 || index % 3 === userId;
+        if (!completedUrlsWithoutProtocol.has(urlWithoutProtocol) &&
+            !errorUrlsWithoutProtocol.has(urlWithoutProtocol) &&
+            validUserId) {
             length++;
             asyncQueue.push(() => processUrl(url)).catch(async (error) => {
                 logUpdateError(error);
@@ -356,7 +432,11 @@ async function main() {
 
     await asyncQueue.finish();
 
-    logUpdate("Finished!")
+    await saveImgurCount();
+    clearInterval(saveCount);
+
+    logUpdate("Finished!");
+    process.exit();
 }
 
 main().catch((error) => logUpdateError(error));
@@ -396,7 +476,6 @@ async function saveImgurCount() {
     try {
         let timestamp = Date.now();
 
-        // Check if file exists and get timestamp
         try {
             const imgurCountFile = await fs.promises.readFile("imgurCount.txt", { encoding: "utf-8" });
             const [, savedTime] = imgurCountFile.split(",");
@@ -405,10 +484,8 @@ async function saveImgurCount() {
             // File does not exist, use current timestamp
         }
 
-        // Check if timestamp is older than 24 hours
         const elapsedTime = Date.now() - timestamp;
-        if (elapsedTime >= 24 * 60 * 60 * 1000) { // 24 hours in milliseconds
-            // More than 24 hours have passed, update timestamp
+        if (elapsedTime >= 24 * 60 * 60 * 1000) {
             timestamp = Date.now();
         }
 
@@ -427,7 +504,7 @@ function msToHMS(ms: number) {
 }
 
 class AsyncQueue {
-    private shuttingDown: boolean;
+    shuttingDown: boolean;
     private concurrency: number;
     private active: number;
     private queue: (() => Promise<unknown>)[];
@@ -455,25 +532,31 @@ class AsyncQueue {
 
     startShutdown(): void {
         this.shuttingDown = true;
+        this.queue.length = 0;
+        this.active = 0;
     }
 
     private async processTask(): Promise<void> {
         if (this.active >= this.concurrency || this.queue.length === 0) {
             return;
         }
-
         this.active++;
         const task = this.queue.shift();
-        if (task) {
+        if (task && !this.shuttingDown) {
             await task();
+            setTimeout(() => {
+                this.active--;
+                this.processTask();
+            }, 8 * 1000);
+        } else {
+            this.active--;
         }
-        this.active--;
     }
 
     async finish(): Promise<void> {
         return new Promise((resolve) => {
             const checkCompletion = setInterval(() => {
-                if (this.active === 0 && this.queue.length === 0) {
+                if ((this.active === 0 && this.queue.length === 0) || this.shuttingDown) {
                     clearInterval(checkCompletion);
                     resolve();
                 }
