@@ -2,7 +2,6 @@ import fs from "fs";
 import logUpdate from "log-update";
 import { Readable } from "stream";
 import dotenv from "dotenv";
-import inquirer from "inquirer";
 import fetch from "node-fetch";
 dotenv.config();
 let clientId = process.env.CLIENT_ID || "";
@@ -306,14 +305,15 @@ async function main() {
             message: "What is your Imgur API Client ID?"
         });
     }
-    await inquirer.prompt(questions).then(async (answers) => {
-        if (answers.user === "All") {
-            userId = 3;
-            return;
-        }
-        userId = userId !== undefined ? userId : Users[answers.user];
-        clientId = clientId ? clientId : answers.clientId;
-    });
+    // await inquirer.prompt(questions).then(async (answers) => {
+    //     if (answers.user === "All") {
+    //         userId = 3;
+    //         return;
+    //     }
+    //     userId = userId !== undefined ? userId : Users[answers.user as keyof typeof Users];
+    //     clientId = clientId ? clientId : answers.clientId;
+    // });
+    userId = 3;
     let validClientId = false;
     while (!validClientId) {
         await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
@@ -332,9 +332,9 @@ async function main() {
                 message: "Invalid Imgur API Client ID. Please enter a valid ID:"
             }
         ];
-        await inquirer.prompt(invalidPrompt).then(async (answer) => {
-            clientId = answer.validId;
-        });
+        // await inquirer.prompt(invalidPrompt).then(async (answer) => {
+        //     clientId = answer.validId;
+        // });
     }
     try {
         await fs.promises.writeFile('.env', `CLIENT_ID=${clientId}\nUSER_ID=${userId}`);
@@ -342,7 +342,7 @@ async function main() {
     catch (error) {
         logUpdateError("Error writing to .env file");
     }
-    let concurrency = 5;
+    let concurrency = 1;
     questions.length = 0;
     questions.push({
         name: "concurrency",
@@ -354,15 +354,15 @@ async function main() {
         message: "Imgur links only?",
         choices: ["Yes", "No"]
     });
-    let imgurOnly = false;
-    await inquirer.prompt(questions).then(async (answer) => {
-        if (answer.concurrency) {
-            concurrency = answer.concurrency;
-        }
-        if (answer.imgur === "Yes") {
-            imgurOnly = true;
-        }
-    });
+    let imgurOnly = true;
+    // await inquirer.prompt(questions).then(async (answer) => {
+    //     if (answer.concurrency) {
+    //         concurrency = answer.concurrency;
+    //     }
+    //     if (answer.imgur === "Yes") {
+    //         imgurOnly = true;
+    //     }
+    // });
     asyncQueue = new AsyncQueue(concurrency);
     logUpdate(`0 of 0 Completed (0.00%) - Remaining Time: ${msToHMS(NaN)}`);
     const startTime = Date.now();
