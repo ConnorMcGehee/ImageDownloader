@@ -3,6 +3,7 @@ import logUpdate from "log-update"
 import { Readable } from "stream";
 import dotenv from "dotenv";
 import inquirer, { Question } from "inquirer";
+import fetch from "node-fetch";
 
 dotenv.config();
 
@@ -35,7 +36,7 @@ const getImgurAlbumLinks = async (hash: string, originalUrl: string) => {
                 await saveError(originalUrl);
                 return;
             }
-            const data = await newResponse.json();
+            const data: any = await newResponse.json();
             links.push(data.data.link)
 
         }
@@ -45,7 +46,7 @@ const getImgurAlbumLinks = async (hash: string, originalUrl: string) => {
             return;
         }
         else {
-            const data = (await response.json()).data;
+            const data = (await response.json() as any).data;
             if (data) {
                 if (Array.isArray(data)) {
                     for (let image of data) {
@@ -347,7 +348,7 @@ async function main() {
     while (!validClientId) {
         await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
             .then(res => res.json())
-            .then(data => {
+            .then((data: any) => {
                 if (!data.data.error) {
                     validClientId = true;
                 }
