@@ -3,6 +3,8 @@ import logUpdate from "log-update";
 import { Readable } from "stream";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
+import path from "path";
+import url from "url";
 dotenv.config();
 let clientId = process.env.CLIENT_ID || "";
 let userId = process.env.USER_ID ? parseInt(process.env.USER_ID) : undefined;
@@ -354,7 +356,42 @@ async function main() {
     }, 1000);
     const completedUrlsWithoutProtocol = new Set(Array.from(completedUrls).map(url => url.replace(/^https?:\/\//, '')));
     const errorUrlsWithoutProtocol = new Set(Array.from(errorUrls).map(url => url.replace(/^https?:\/\//, '')));
+    // Replace this with your actual URL list
+    const urlList = ["https://i.imgur.com/0BJXMTQ.png", "http://imgur.com/oBrsGha.gif"];
+    // Remove the protocols from the URLs in the list
+    const strippedUrlList = urlList.map(u => {
+        const parsed = url.parse(u);
+        return `${parsed.hostname}${parsed.path}`;
+    });
+    // Define the folder you want to check
+    const folderPath = 'images';
+    // Function to convert filename to URL, without the protocol
+    function filenameToUrl(filename) {
+        let base = filename.split('_').pop();
+        if (!base) {
+            return;
+        }
+        let extension = path.extname(base);
+        let id = path.basename(base, extension);
+        // Determine whether to use 'i.imgur' or 'imgur' based on filename
+        let domain = filename.startsWith('iimgur') ? 'i.imgur.com' : 'imgur.com';
+        return `${domain}/${id}${extension}`;
+    }
+    let imageFiles;
+    fs.readdir(folderPath, (err, files) => {
+        if (err) {
+            return console.error(`Failed to read directory: ${err}`);
+        }
+        imageFiles = Array.from(files);
+    });
     data.forEach((url, index) => {
+        let foundFile = false;
+        for (const file of imageFiles) {
+            let fileUrl = filenameToUrl(file);
+            if (fileUrl && strippedUrlList.includes(fileUrl)) {
+                foundFile = true;
+            }
+        }
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
         if (imgurOnly && !(urlWithoutProtocol.startsWith("imgur.com") || (urlWithoutProtocol.startsWith("i.imgur.com")))) {
             return;
@@ -363,6 +400,7 @@ async function main() {
         if (!completedUrlsWithoutProtocol.has(urlWithoutProtocol) &&
             !errorUrlsWithoutProtocol.has(urlWithoutProtocol) &&
             validUserId) {
+            console.log(completedUrlsWithoutProtocol.has(urlWithoutProtocol));
             length++;
             asyncQueue.push(() => processUrl(url)).catch(async (error) => {
                 logUpdateError(error);
