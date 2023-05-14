@@ -377,13 +377,7 @@ async function main() {
         let domain = filename.startsWith('iimgur') ? 'i.imgur.com' : 'imgur.com';
         return `${domain}/${id}${extension}`;
     }
-    let imageFiles;
-    fs.readdir(folderPath, (err, files) => {
-        if (err) {
-            return console.error(`Failed to read directory: ${err}`);
-        }
-        imageFiles = Array.from(files);
-    });
+    const imageFiles = await fs.promises.readdir(folderPath);
     data.forEach((url, index) => {
         let foundFile = false;
         for (const file of imageFiles) {

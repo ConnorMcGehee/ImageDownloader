@@ -428,13 +428,7 @@ async function main() {
         return `${domain}/${id}${extension}`;
     }
 
-    let imageFiles: string[];
-    fs.readdir(folderPath, (err, files) => {
-        if (err) {
-            return console.error(`Failed to read directory: ${err}`);
-        }
-        imageFiles = Array.from(files);
-    });
+    const imageFiles = await fs.promises.readdir(folderPath);
 
     data.forEach((url, index) => {
         let foundFile = false;
