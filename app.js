@@ -354,7 +354,6 @@ async function main() {
     }, 1000);
     const completedUrlsWithoutProtocol = new Set(Array.from(completedUrls).map(url => url.replace(/^https?:\/\//, '')));
     const errorUrlsWithoutProtocol = new Set(Array.from(errorUrls).map(url => url.replace(/^https?:\/\//, '')));
-    console.log(completedUrls);
     data.forEach((url, index) => {
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
         if (imgurOnly && !(urlWithoutProtocol.startsWith("imgur.com") || (urlWithoutProtocol.startsWith("i.imgur.com")))) {
