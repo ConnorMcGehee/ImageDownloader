@@ -207,7 +207,6 @@ const processUrl = async (url: string) => {
     }
     await saveProgress(originalUrl);
     await saveProgress(url);
-    index++;
 }
 
 const generateFileStream = (prefix: string, counter: number = 0): Promise<fs.WriteStream> => {
@@ -550,6 +549,7 @@ class AsyncQueue {
         } else {
             this.active--;
         }
+        index++;
     }
 
     async finish(): Promise<void> {

@@ -192,7 +192,6 @@ const processUrl = async (url) => {
     }
     await saveProgress(originalUrl);
     await saveProgress(url);
-    index++;
 };
 const generateFileStream = (prefix, counter = 0) => {
     return new Promise((resolve, reject) => {
@@ -484,6 +483,7 @@ class AsyncQueue {
         else {
             this.active--;
         }
+        index++;
     }
     async finish() {
         return new Promise((resolve) => {
