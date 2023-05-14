@@ -7,7 +7,6 @@ dotenv.config();
 let clientId = process.env.CLIENT_ID || "";
 let userId = process.env.USER_ID ? parseInt(process.env.USER_ID) : undefined;
 let index = 0;
-let imgurCount = 0;
 let asyncQueue;
 const completedUrls = new Set();
 const errorUrls = new Set();
@@ -62,16 +61,6 @@ const processUrl = async (url) => {
     const originalUrl = url;
     try {
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
-        if (urlWithoutProtocol.startsWith("imgur.com") || urlWithoutProtocol.startsWith("i.imgur.com")) {
-            imgurCount++;
-            if (imgurCount >= 12_250) {
-                logUpdateError("Warning! Approaching Imgur rate limit");
-                console.log("Approaching Imgur rate limit. Shutting down. Please try again in 24 hours.");
-                await saveImgurCount();
-                asyncQueue.startShutdown();
-                return;
-            }
-        }
         const splitUrl = originalUrl.replace(/^https?:\/\//, '').replaceAll("/", "_").split(".");
         const endOfUrl = splitUrl[splitUrl.length - 1];
         const exts = ["jpg", "jpeg", "png", "gif"];
@@ -239,27 +228,8 @@ async function createFileIfNotExists(filePath, initialContent = '') {
     }
 }
 async function main() {
-    const saveCount = setInterval(saveImgurCount, 60 * 1000);
-    process.on('beforeExit', saveImgurCount);
     await createFileIfNotExists('errors.txt');
     await createFileIfNotExists('progress.txt');
-    try {
-        const imgurCountFile = await fs.promises.readFile("imgurCount.txt", { encoding: "utf-8" });
-        const [savedImgurCount, savedTime] = imgurCountFile.split(",");
-        imgurCount = Number(savedImgurCount);
-        const elapsedTime = Date.now() - Number(savedTime);
-        if (elapsedTime >= 24 * 60 * 60 * 1000) {
-            imgurCount = 0;
-        }
-    }
-    catch (error) {
-        imgurCount = 0;
-    }
-    if (imgurCount >= 12_250) {
-        logUpdateError("Warning! Approaching Imgur rate limit");
-        console.log("Approaching Imgur rate limit. Shutting down. Please try again in 24 hours.");
-        process.exit();
-    }
     const data = [];
     await fetch("https://raw.githubusercontent.com/ConnorMcGehee/ImageDownloader/main/urls.txt")
         .then(res => res.text())
@@ -379,6 +349,7 @@ async function main() {
     }, 1000);
     const completedUrlsWithoutProtocol = new Set(Array.from(completedUrls).map(url => url.replace(/^https?:\/\//, '')));
     const errorUrlsWithoutProtocol = new Set(Array.from(errorUrls).map(url => url.replace(/^https?:\/\//, '')));
+    data.reverse();
     data.forEach((url, index) => {
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
         if (imgurOnly && !(urlWithoutProtocol.startsWith("imgur.com") || (urlWithoutProtocol.startsWith("i.imgur.com")))) {
@@ -396,8 +367,6 @@ async function main() {
         }
     });
     await asyncQueue.finish();
-    await saveImgurCount();
-    clearInterval(saveCount);
     logUpdate("Finished!");
     process.exit();
 }
@@ -429,27 +398,6 @@ async function saveError(url) {
     }
     catch (error) {
         logUpdateError(`Error saving errors file`);
-    }
-}
-async function saveImgurCount() {
-    try {
-        let timestamp = Date.now();
-        try {
-            const imgurCountFile = await fs.promises.readFile("imgurCount.txt", { encoding: "utf-8" });
-            const [, savedTime] = imgurCountFile.split(",");
-            timestamp = Number(savedTime);
-        }
-        catch (error) {
-            // File does not exist, use current timestamp
-        }
-        const elapsedTime = Date.now() - timestamp;
-        if (elapsedTime >= 24 * 60 * 60 * 1000) {
-            timestamp = Date.now();
-        }
-        await fs.promises.writeFile("imgurCount.txt", `${imgurCount},${timestamp}`, { encoding: "utf-8" });
-    }
-    catch (error) {
-        logUpdateError(`Error saving imgurCount file`);
     }
 }
 function msToHMS(ms) {
