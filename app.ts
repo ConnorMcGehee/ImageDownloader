@@ -326,33 +326,33 @@ async function main() {
 
     let validClientId = false;
 
-    logUpdate("Checking for valid client ID");
-    while (!validClientId) {
-        await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
-            .then(res => res.json())
-            .then((data: any) => {
-                if (!data.data.error) {
-                    validClientId = true;
-                }
-            });
-        if (validClientId) { break; }
-        const invalidPrompt: Question[] = [
-            {
-                name: "validId",
-                message: "Invalid Imgur API Client ID. Please enter a valid ID:"
-            }
-        ];
-        // await inquirer.prompt(invalidPrompt).then(async (answer) => {
-        //     clientId = answer.validId;
-        // });
-    }
-    try {
+    // logUpdate("Checking for valid client ID");
+    // while (!validClientId) {
+    //     await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
+    //         .then(res => res.json())
+    //         .then((data: any) => {
+    //             if (!data.data.error) {
+    //                 validClientId = true;
+    //             }
+    //         });
+    //     if (validClientId) { break; }
+    //     const invalidPrompt: Question[] = [
+    //         {
+    //             name: "validId",
+    //             message: "Invalid Imgur API Client ID. Please enter a valid ID:"
+    //         }
+    //     ];
+    //     // await inquirer.prompt(invalidPrompt).then(async (answer) => {
+    //     //     clientId = answer.validId;
+    //     // });
+    // }
+    // try {
 
-        logUpdate("Writing to .env file");
-        await fs.promises.writeFile('.env', `CLIENT_ID=${clientId}\nUSER_ID=${userId}`);
-    } catch (error) {
-        logUpdateError("Error writing to .env file");
-    }
+    //     logUpdate("Writing to .env file");
+    //     await fs.promises.writeFile('.env', `CLIENT_ID=${clientId}\nUSER_ID=${userId}`);
+    // } catch (error) {
+    //     logUpdateError("Error writing to .env file");
+    // }
 
     let concurrency = 1;
 
