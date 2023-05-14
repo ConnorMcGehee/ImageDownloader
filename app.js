@@ -235,7 +235,7 @@ async function main() {
     await createFileIfNotExists('errors.txt');
     logUpdate("Checking progress.txt file");
     await createFileIfNotExists('progress.txt');
-    const data = [];
+    const data = new Set();
     logUpdate("Fetching urls.txt file");
     await fetch("https://raw.githubusercontent.com/ConnorMcGehee/ImageDownloader/main/urls.txt")
         .then(res => res.text())
@@ -243,7 +243,7 @@ async function main() {
         const urls = text.split("\n")
             .filter(line => line.trim() !== "");
         for (let url of urls) {
-            data.push(url);
+            data.add(url);
         }
     })
         .catch(async () => {
@@ -251,7 +251,7 @@ async function main() {
             .split("\n")
             .filter(line => line.trim() !== "");
         for (let url of urlsArray) {
-            data.push(url);
+            data.add(url);
         }
     });
     logUpdate("Reading progress.txt file");
@@ -357,7 +357,7 @@ async function main() {
     const completedUrlsWithoutProtocol = new Set(Array.from(completedUrls).map(url => url.replace(/^https?:\/\//, '')));
     const errorUrlsWithoutProtocol = new Set(Array.from(errorUrls).map(url => url.replace(/^https?:\/\//, '')));
     // Replace this with your actual URL list
-    const urlList = ["https://i.imgur.com/0BJXMTQ.png", "http://imgur.com/oBrsGha.gif"];
+    const urlList = Array.from(data);
     // Remove the protocols from the URLs in the list
     const strippedUrlList = urlList.map(u => {
         const parsed = url.parse(u);
@@ -378,22 +378,23 @@ async function main() {
         return `${domain}/${id}${extension}`;
     }
     const imageFiles = await fs.promises.readdir(folderPath);
-    data.forEach((url, index) => {
-        let foundFile = false;
-        for (const file of imageFiles) {
-            let fileUrl = filenameToUrl(file);
-            if (fileUrl && strippedUrlList.includes(fileUrl)) {
-                foundFile = true;
-            }
+    for (const file of imageFiles) {
+        let fileUrl = filenameToUrl(file);
+        if (fileUrl && strippedUrlList.includes(fileUrl)) {
+            data.forEach(url => {
+                if (fileUrl && url.includes(fileUrl)) {
+                    data.delete(url);
+                }
+            });
         }
+    }
+    data.forEach((url) => {
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
         if (imgurOnly && !(urlWithoutProtocol.startsWith("imgur.com") || (urlWithoutProtocol.startsWith("i.imgur.com")))) {
             return;
         }
-        const validUserId = userId === 3 || index % 3 === userId;
         if (!completedUrlsWithoutProtocol.has(urlWithoutProtocol) &&
-            !errorUrlsWithoutProtocol.has(urlWithoutProtocol) &&
-            validUserId) {
+            !errorUrlsWithoutProtocol.has(urlWithoutProtocol)) {
             console.log(completedUrlsWithoutProtocol.has(urlWithoutProtocol));
             length++;
             asyncQueue.push(() => processUrl(url)).catch(async (error) => {
