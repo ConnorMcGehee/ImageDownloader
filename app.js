@@ -381,11 +381,8 @@ async function main() {
     for (const file of imageFiles) {
         let fileUrl = filenameToUrl(file);
         if (fileUrl && strippedUrlList.includes(fileUrl)) {
-            data.forEach(url => {
-                if (fileUrl && url.includes(fileUrl)) {
-                    data.delete(url);
-                }
-            });
+            data.delete("http://" + fileUrl);
+            data.delete("https://" + fileUrl);
         }
     }
     data.forEach((url) => {
