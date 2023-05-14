@@ -245,11 +245,17 @@ async function createFileIfNotExists(filePath: string, initialContent = '') {
 
 async function main() {
 
+    logUpdate("Initializing...");
+
+
+    logUpdate("Checking errors.txt file");
     await createFileIfNotExists('errors.txt');
+    logUpdate("Checking progress.txt file");
     await createFileIfNotExists('progress.txt');
 
     const data: string[] = [];
 
+    logUpdate("Fetching urls.txt file");
     await fetch("https://raw.githubusercontent.com/ConnorMcGehee/ImageDownloader/main/urls.txt")
         .then(res => res.text())
         .then(text => {
@@ -269,6 +275,8 @@ async function main() {
             }
         });
 
+
+    logUpdate("Reading progress.txt file");
     const completedUrlsArray = (await fs.promises.readFile("progress.txt", { encoding: "utf-8" }))
         .split("\n")
         .filter(line => line.trim() !== "")
@@ -277,6 +285,8 @@ async function main() {
         completedUrls.add(url);
     }
 
+
+    logUpdate("Reading errors.txt file");
     const errorUrlsArray = (await fs.promises.readFile("errors.txt", { encoding: "utf-8" }))
         .split("\n")
         .filter(line => line.trim() !== "")
@@ -315,6 +325,8 @@ async function main() {
     userId = 3;
 
     let validClientId = false;
+
+    logUpdate("Checking for valid client ID");
     while (!validClientId) {
         await fetch('https://api.imgur.com/3/image/4ihzAJ5', { headers: { 'Authorization': `Client-ID ${clientId}` } })
             .then(res => res.json())
@@ -335,6 +347,8 @@ async function main() {
         // });
     }
     try {
+
+        logUpdate("Writing to .env file");
         await fs.promises.writeFile('.env', `CLIENT_ID=${clientId}\nUSER_ID=${userId}`);
     } catch (error) {
         logUpdateError("Error writing to .env file");
