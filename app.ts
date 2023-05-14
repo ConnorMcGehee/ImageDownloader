@@ -398,7 +398,7 @@ async function main() {
     const completedUrlsWithoutProtocol = new Set(Array.from(completedUrls).map(url => url.replace(/^https?:\/\//, '')));
     const errorUrlsWithoutProtocol = new Set(Array.from(errorUrls).map(url => url.replace(/^https?:\/\//, '')));
 
-    data.reverse();
+    console.log(completedUrls)
 
     data.forEach((url, index) => {
         const urlWithoutProtocol = url.replace(/^https?:\/\//, '');
