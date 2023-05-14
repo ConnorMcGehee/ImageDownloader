@@ -395,7 +395,6 @@ async function main() {
         }
         if (!completedUrlsWithoutProtocol.has(urlWithoutProtocol) &&
             !errorUrlsWithoutProtocol.has(urlWithoutProtocol)) {
-            console.log(completedUrlsWithoutProtocol.has(urlWithoutProtocol));
             length++;
             asyncQueue.push(() => processUrl(url)).catch(async (error) => {
                 logUpdateError(error);
